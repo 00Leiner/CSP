@@ -1,0 +1,48 @@
+    def constraints(self):
+        for student_id, course_id in self.student_course_assignments:
+            for teacher_id, course_id in self.teacher_course_assignments:
+                for room_id, room_type, day, time in self.room_availability:
+                    if self.student_teacher_course_match(student_id, teacher_id, course_id) and self.room_is_available(room_id, day, time):
+                        self.model.Add(self.student_course_assignments[(student_id, course_id)]).OnlyEnforceIf(
+                            self.room_availability[(room_id, room_type, day, time)])
+                        self.model.Add(self.teacher_course_assignments[(teacher_id, course_id)]).OnlyEnforceIf(
+                            self.room_availability[(room_id, room_type, day, time)])
+                        
+    def student_teacher_course_match(student_id, teacher_id, course_id, students, teachers, courses):
+        # Find the student's course
+        student_course = next((course for student in students if student['_id'] == student_id
+                            for student_course in student['courses']
+                            for course in courses
+                            if student_course['code'] == course['code']
+                            and student_course['description'] == course['description']), None)
+
+        if student_course is None:
+            return False
+
+        # Find the teacher's specialization
+        teacher_specialization = next((specialization for teacher in teachers if teacher['_id'] == teacher_id
+                                    for specialization in teacher['specialized']
+                                    if specialization['code'] == student_course['code']
+                                    and specialization['description'] == student_course['description']), None)
+
+        return teacher_specialization is not None   
+
+    def room_is_available(room_id, day, time, room_availability):
+        return room_availability.get((room_id, day, time), False)
+
+    def solve(self):
+        status = self.solver.Solve(self.model)
+        if status == cp_model.FEASIBLE or status == cp_model.OPTIMAL:
+            print("Solution found:")
+            for student_id, course_id in self.student_course_assignments:
+                if self.solver.Value(self.student_course_assignments[(student_id, course_id)]) == 1:
+                    for teacher_id, course_id in self.teacher_course_assignments:
+                        if self.solver.Value(self.teacher_course_assignments[(teacher_id, course_id)]) == 1:
+                            for room_id, room_type, day, time in self.room_availability:
+                                if self.solver.Value(self.room_availability[(room_id, room_type, day, time)]) == 1:
+                                    print(f"Student {student_id} is assigned to Course {course_id}")
+                                    print(f"Teacher {teacher_id} is assigned to Course {course_id}")
+                                    print(f"Room {room_id} of type {room_type} is available on {self.day[day]} at {self.time[time]}")
+                                    print()  # Add a newline for readability
+        else:
+            print("No solution found.")
